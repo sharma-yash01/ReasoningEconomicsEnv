@@ -1,6 +1,7 @@
 """Environment configuration (EnvConfig) for v2 post-training RL environment."""
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, replace
 from typing import Optional
 
 
@@ -42,3 +43,19 @@ class EnvConfig:
             return self.total_budget
         avg_tokens = (self.min_tokens + self.max_tokens) / 2.0
         return int(self.budget_ratio * self.num_questions * avg_tokens)
+
+
+def env_config_for_server() -> EnvConfig:
+    """Defaults for new OpenEnv sessions, with optional Docker/deploy overrides.
+
+    ``REE_DEFAULT_TOKENIZER_NAME``: Hugging Face model id used when the client
+    does not send ``tokenizer_name`` on reset (post-training clients should send it).
+    """
+    cfg = EnvConfig()
+    tok = os.environ.get("REE_DEFAULT_TOKENIZER_NAME", "").strip()
+    if tok:
+        cfg = replace(cfg, tokenizer_name=tok)
+    prod = os.environ.get("REE_PROD", "").strip().lower()
+    if prod in ("1", "true", "yes"):
+        cfg = replace(cfg, prod=True)
+    return cfg

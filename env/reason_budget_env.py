@@ -102,6 +102,8 @@ class ReasonBudgetEnvironment(
             numina_subset_size=self.config.numina_subset_size,
         )
         self._tokenizer = None
+        self._tokenizer_cache_key: Optional[str] = None
+        self._active_tokenizer_name: Optional[str] = None
         self.num_questions = self.config.num_questions
         self.min_tokens = self.config.min_tokens
         self.max_tokens = self.config.max_tokens
@@ -114,17 +116,30 @@ class ReasonBudgetEnvironment(
         self._history: list[dict] = []
         self._total_correct: int = 0
 
+    def _resolved_tokenizer_name(self) -> str:
+        if self._active_tokenizer_name:
+            return self._active_tokenizer_name
+        return self.config.tokenizer_name
+
+    def _invalidate_tokenizer_cache(self) -> None:
+        self._tokenizer = None
+        self._tokenizer_cache_key = None
+
     def _get_tokenizer(self):
-        if self._tokenizer is not None:
+        name = self._resolved_tokenizer_name()
+        if self._tokenizer is not None and self._tokenizer_cache_key == name:
             return self._tokenizer
+        self._invalidate_tokenizer_cache()
         try:
             from transformers import AutoTokenizer
 
             self._tokenizer = AutoTokenizer.from_pretrained(
-                self.config.tokenizer_name, trust_remote_code=True
+                name, trust_remote_code=True
             )
+            self._tokenizer_cache_key = name
         except Exception:
             self._tokenizer = None
+            self._tokenizer_cache_key = None
         return self._tokenizer
 
     def _count_tokens(self, text: str) -> int:
@@ -139,8 +154,10 @@ class ReasonBudgetEnvironment(
         self,
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
+        tokenizer_name: Optional[str] = None,
         **kwargs,
     ):
+        tokenizer_name = tokenizer_name or kwargs.pop("tokenizer_name", None)
         if seed is not None:
             self._sampler = EpisodeSampler(
                 seed=seed,
@@ -162,6 +179,12 @@ class ReasonBudgetEnvironment(
         self._step_idx = 0
         self._history = []
         self._total_correct = 0
+        tn = (tokenizer_name or "").strip()
+        if tn:
+            self._active_tokenizer_name = tn
+        else:
+            self._active_tokenizer_name = None
+        self._invalidate_tokenizer_cache()
         obs = _obs_from_internals(
             step_idx=self._step_idx,
             questions=self._questions,
@@ -209,6 +232,14 @@ class ReasonBudgetEnvironment(
             return obs
 
         question = self._questions[self._step_idx]
+
+        md = action.metadata or {}
+        meta_tn = md.get("tokenizer_name")
+        if isinstance(meta_tn, str) and meta_tn.strip():
+            mts = meta_tn.strip()
+            if mts != (self._active_tokenizer_name or ""):
+                self._active_tokenizer_name = mts
+                self._invalidate_tokenizer_cache()
 
         # 1. Tokenize the response to count tokens_used
         tokens_raw = self._count_tokens(action.response)

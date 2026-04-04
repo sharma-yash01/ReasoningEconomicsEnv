@@ -72,7 +72,13 @@ uvicorn server.app:app --host 0.0.0.0 --port 8000
 
 ## Environment Contract
 
-**Action**: `ReasonBudgetAction(response=str)` -- the LLM's full text output (reasoning trace + answer).
+**Action**: `ReasonBudgetAction(response=str)` -- the LLM's full text output (reasoning trace + answer). Optional `metadata` may include `tokenizer_name` (a Hugging Face model id). When set, the server uses `AutoTokenizer.from_pretrained` for that id to count tokens on that step (and updates the session tokenizer if it changed).
+
+**Reset (OpenEnv / WebSocket)**: Besides `seed` and `episode_id`, clients may pass **`tokenizer_name`** (string, Hugging Face model id). It applies for the new episode: per-step `tokens_used` and remaining budget are computed with that tokenizer until the next reset or a different `metadata.tokenizer_name` on a step.
+
+**Total episode budget**: The scalar `total_budget` for an episode still comes from `EnvConfig.get_total_budget()` (`num_questions`, `budget_ratio`, `min_tokens` / `max_tokens`, or `total_budget`). It does **not** depend on which tokenizer counts response tokens; aligning `tokenizer_name` only fixes **per-step token counts** vs the policy’s tokenizer.
+
+**Server requirement**: The env host (Docker, HF Space, etc.) must be able to download and cache tokenizers from the Hub for any `tokenizer_name` you send (network access on first use).
 
 **Observation**: question text, remaining budget, questions remaining, budget per remaining question, accuracy so far, episode history, done, reward.
 
@@ -101,10 +107,29 @@ Configure in `env/config.py`:
 
 ## Docker
 
+Build context is the **repo root** (`ReasoningEconomicsEnv/`).
+
 ```bash
 docker build -f server/Dockerfile -t reasoning-economic-env .
-docker run -p 8000:8000 reasoning-economic-env
+docker run --rm -p 8000:8000 reasoning-economic-env
 ```
+
+**Build logs:** The Dockerfile prints `BASE_IMAGE` and a JSON dump of default `EnvConfig` (including `tokenizer_name`, budget fields) in the **builder** and **final** stages. **Container logs:** On start, the entrypoint prints `REE_*` env vars and the **effective** `EnvConfig` after `REE_DEFAULT_TOKENIZER_NAME` / `REE_PROD` (optional).
+
+**Remote H100 (or any GPU host) — run env beside training:** The OpenEnv server is CPU-only (tokenizer + grading); no GPU flag is required for this container.
+
+```bash
+# On the H100 machine (from this directory)
+docker build -f server/Dockerfile -t ree-env:latest .
+
+# Optional: set default Hub tokenizer if clients omit reset tokenizer_name
+docker run --rm -d --name ree-env -p 8000:8000 \
+  -e REE_DEFAULT_TOKENIZER_NAME="Qwen/Qwen3-4B" \
+  -v "${HOME}/.cache/huggingface:/root/.cache/huggingface" \
+  ree-env:latest
+```
+
+Point **ReasoningEconomicsPT** at `http://<host>:8000` (`--env_base_url` or `http://127.0.0.1:8000` if co-located). Ensure the host can reach Hugging Face to download tokenizers the first time (or pre-populate the cache volume).
 
 ## OpenEnv
 
