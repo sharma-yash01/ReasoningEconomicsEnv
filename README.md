@@ -112,6 +112,7 @@ Build context is the **repo root** (`ReasoningEconomicsEnv/`).
 ```bash
 docker build -f server/Dockerfile -t reasoning-economic-env .
 docker run --rm -p 8000:8000 reasoning-economic-env
+docker run -d --name ree-env -p 8000:8000 reasoning-economic-env # detached container to continue using shell
 ```
 
 **Build logs:** The Dockerfile prints `BASE_IMAGE` and a JSON dump of default `EnvConfig` (including `tokenizer_name`, budget fields) in the **builder** and **final** stages. **Container logs:** On start, the entrypoint prints `REE_*` env vars and the **effective** `EnvConfig` after `REE_DEFAULT_TOKENIZER_NAME` / `REE_PROD` (optional).
