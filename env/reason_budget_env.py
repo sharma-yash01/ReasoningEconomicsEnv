@@ -6,6 +6,7 @@ The LLM generation is driven by the trainer (via environment_factory).
 """
 
 import uuid
+import warnings
 from typing import Optional
 
 from env.config import EnvConfig
@@ -150,14 +151,39 @@ class ReasonBudgetEnvironment(
         # Rough fallback: ~0.75 words per token (conservative)
         return max(1, int(len(text.split()) * 1.33))
 
+    def _compute_tokenizer_native_budget(self, questions: list[Question]) -> int:
+        """Compute total budget by tokenizing the actual episode questions.
+
+        Budget = budget_ratio * sum(token_count(question_i.text)) for all sampled
+        questions, measured in the active policy tokenizer's units.  Falls back to
+        the config-derived formula if the tokenizer cannot be loaded.
+        """
+        tokenizer = self._get_tokenizer()
+        if tokenizer is None:
+            warnings.warn(
+                "Could not load tokenizer for tokenizer-native budget computation; "
+                "falling back to config-derived budget (abstract units). "
+                f"Attempted tokenizer: {self._resolved_tokenizer_name()!r}",
+                UserWarning,
+                stacklevel=2,
+            )
+            return self.config.get_total_budget()
+        total_question_tokens = sum(
+            len(tokenizer.encode(q.text, add_special_tokens=False))
+            for q in questions
+        )
+        return max(1, int(self.config.budget_ratio * total_question_tokens))
+
     def reset(
         self,
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
         tokenizer_name: Optional[str] = None,
+        total_budget: Optional[int] = None,
         **kwargs,
     ):
         tokenizer_name = tokenizer_name or kwargs.pop("tokenizer_name", None)
+        total_budget = total_budget or kwargs.pop("total_budget", None)
         if seed is not None:
             self._sampler = EpisodeSampler(
                 seed=seed,
@@ -174,17 +200,38 @@ class ReasonBudgetEnvironment(
         )
         if len(self._questions) < self.num_questions:
             self.num_questions = len(self._questions)
-        self.total_budget = self.config.get_total_budget()
-        self._remaining_budget = self.total_budget
         self._step_idx = 0
         self._history = []
         self._total_correct = 0
+
+        # --- Tokenizer setup (must precede budget computation) ---
         tn = (tokenizer_name or "").strip()
         if tn:
             self._active_tokenizer_name = tn
         else:
             self._active_tokenizer_name = None
         self._invalidate_tokenizer_cache()
+
+        # --- Budget computation (priority: client override > tokenizer-native > config) ---
+        if total_budget is not None:
+            self.total_budget = int(total_budget)
+            self._budget_source = "client"
+        elif self._active_tokenizer_name:
+            self.total_budget = self._compute_tokenizer_native_budget(self._questions)
+            self._budget_source = "tokenizer_native"
+        else:
+            warnings.warn(
+                "No tokenizer_name provided on reset and no explicit total_budget; "
+                "budget cap is derived from config min_tokens/max_tokens in abstract "
+                "units, not aligned to any policy tokenizer. Set tokenizer_name on "
+                "reset or pass total_budget explicitly for tokenizer-aligned budgets.",
+                UserWarning,
+                stacklevel=2,
+            )
+            self.total_budget = self.config.get_total_budget()
+            self._budget_source = "config"
+
+        self._remaining_budget = self.total_budget
         obs = _obs_from_internals(
             step_idx=self._step_idx,
             questions=self._questions,
@@ -195,6 +242,8 @@ class ReasonBudgetEnvironment(
         )
         obs.reward = 0.0
         obs.done = False
+        obs.metadata["total_budget"] = self.total_budget
+        obs.metadata["budget_source"] = self._budget_source
         return obs
 
     def step(

@@ -1,6 +1,7 @@
 """Environment configuration (EnvConfig) for v2 post-training RL environment."""
 
 import os
+import warnings
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -38,11 +39,28 @@ class EnvConfig:
     seed: Optional[int] = None
 
     def get_total_budget(self) -> int:
-        """Compute total_budget from budget_ratio if not set."""
+        """Compute total_budget from budget_ratio if not set.
+
+        NOTE: This formula uses min_tokens/max_tokens as abstract units. It does
+        NOT tokenize any content with ``tokenizer_name``. When a policy tokenizer
+        is active, prefer ``ReasonBudgetEnvironment._compute_tokenizer_native_budget``
+        (called automatically on ``reset`` when ``tokenizer_name`` is provided).
+        """
         if self.total_budget is not None:
             return self.total_budget
         avg_tokens = (self.min_tokens + self.max_tokens) / 2.0
-        return int(self.budget_ratio * self.num_questions * avg_tokens)
+        derived = int(self.budget_ratio * self.num_questions * avg_tokens)
+        if self.tokenizer_name and self.tokenizer_name != "Qwen/Qwen2.5-0.5B-Instruct":
+            warnings.warn(
+                f"EnvConfig.tokenizer_name is set to {self.tokenizer_name!r} but "
+                f"total_budget is derived from min_tokens/max_tokens ({derived} abstract "
+                "units), not from the tokenizer. The budget cap and per-step token "
+                "counts may be in different unit systems. Pass total_budget explicitly "
+                "or use tokenizer_name on reset() for tokenizer-native budgets.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return derived
 
 
 def env_config_for_server() -> EnvConfig:
