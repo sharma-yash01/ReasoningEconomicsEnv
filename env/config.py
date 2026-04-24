@@ -6,6 +6,42 @@ from dataclasses import dataclass, replace
 from typing import Optional
 
 
+# Keep the server settings adjustable from shell exports on Lambda.
+# Blank values mean "use the normal default".
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"Invalid boolean for {name}: {raw!r}")
+
+
+def _env_int(name: str, default: int | None) -> int | None:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return int(raw)
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return float(raw)
+
+
+def _env_str(name: str, default: str) -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip()
+    return value or default
+
+
 @dataclass
 class EnvConfig:
     """Fully configurable episode and environment parameters."""
@@ -38,6 +74,54 @@ class EnvConfig:
     target_utilization: float = 0.9
     seed: Optional[int] = None
 
+    @classmethod
+    def from_env(cls):
+        """Build config from REASON_BUDGET_* env vars.
+
+        This let us switch between 4 question smokes, 10 question runs, hard
+        budgets, and soft budgets without editing this file on the VM.
+        """
+        return cls(
+            prod=_env_bool("REASON_BUDGET_PROD", cls.prod),
+            subset_start_idx=_env_int("REASON_BUDGET_SUBSET_START_IDX", cls.subset_start_idx),
+            subset_size=_env_int("REASON_BUDGET_SUBSET_SIZE", cls.subset_size),
+            numina_subset_start_idx=_env_int(
+                "REASON_BUDGET_NUMINA_SUBSET_START_IDX",
+                cls.numina_subset_start_idx,
+            ),
+            numina_subset_size=_env_int(
+                "REASON_BUDGET_NUMINA_SUBSET_SIZE",
+                cls.numina_subset_size,
+            ),
+            hard_cap_mode=_env_bool("REASON_BUDGET_HARD_CAP_MODE", cls.hard_cap_mode),
+            soft_allow_negative_budget=_env_bool(
+                "REASON_BUDGET_SOFT_ALLOW_NEGATIVE_BUDGET",
+                cls.soft_allow_negative_budget,
+            ),
+            soft_overspend_penalty=_env_float(
+                "REASON_BUDGET_SOFT_OVERSPEND_PENALTY",
+                cls.soft_overspend_penalty,
+            ),
+            num_questions=_env_int("REASON_BUDGET_NUM_QUESTIONS", cls.num_questions),
+            total_budget=_env_int("REASON_BUDGET_TOTAL_BUDGET", cls.total_budget),
+            budget_ratio=_env_float("REASON_BUDGET_BUDGET_RATIO", cls.budget_ratio),
+            min_tokens=_env_int("REASON_BUDGET_MIN_TOKENS", cls.min_tokens),
+            max_tokens=_env_int("REASON_BUDGET_MAX_TOKENS", cls.max_tokens),
+            max_tokens_per_step=_env_int(
+                "REASON_BUDGET_MAX_TOKENS_PER_STEP",
+                cls.max_tokens_per_step,
+            ),
+            tokenizer_name=_env_str("REASON_BUDGET_TOKENIZER_NAME", cls.tokenizer_name),
+            beta=_env_float("REASON_BUDGET_BETA", cls.beta),
+            gamma=_env_float("REASON_BUDGET_GAMMA", cls.gamma),
+            lambda_ep=_env_float("REASON_BUDGET_LAMBDA_EP", cls.lambda_ep),
+            target_utilization=_env_float(
+                "REASON_BUDGET_TARGET_UTILIZATION",
+                cls.target_utilization,
+            ),
+            seed=_env_int("REASON_BUDGET_SEED", cls.seed),
+        )
+
     def get_total_budget(self) -> int:
         """Compute total_budget from budget_ratio if not set.
 
@@ -69,7 +153,7 @@ def env_config_for_server() -> EnvConfig:
     ``REE_DEFAULT_TOKENIZER_NAME``: Hugging Face model id used when the client
     does not send ``tokenizer_name`` on reset (post-training clients should send it).
     """
-    cfg = EnvConfig()
+    cfg = EnvConfig.from_env()
     tok = os.environ.get("REE_DEFAULT_TOKENIZER_NAME", "").strip()
     if tok:
         cfg = replace(cfg, tokenizer_name=tok)

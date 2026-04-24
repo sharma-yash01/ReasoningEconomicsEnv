@@ -4,10 +4,12 @@
 .venv/
 venv/
 ree-venv/
-# env/
+# keep the actual Python package directory `env/` tracked
 ENV/
 env.bak/
 *.venv/
+!env/
+!env/**
 
 # HuggingFace / PyTorch / pip caches (can be huge)
 .cache/

@@ -73,21 +73,21 @@ uvicorn server.app:app --host 0.0.0.0 --port 8000
 ## Environment Contract
 
 **Action**: `ReasonBudgetAction(response=str)` -- the LLM's full text output (reasoning trace + answer). Optional `metadata` may include:
-- **`tokenizer_name`** (Hugging Face model id) — when set, the server uses `AutoTokenizer.from_pretrained` for that id to count tokens on that step (and updates the session tokenizer if it changed).
-- **`grading_response`** (string, optional) — if non-empty, used **only** for `\\boxed{}` extraction and answer grading. Token budgeting always uses `response` in full. Use this when the policy emits hybrid internal reasoning before the final answer (e.g. Qwen3 family) so a spurious `\\boxed{}` inside the reasoning span does not affect grading.
+- **`tokenizer_name`** (Hugging Face model id): when set, the server uses `AutoTokenizer.from_pretrained` for that id to count tokens on that step (and updates the session tokenizer if it changed).
+- **`grading_response`** (string, optional): if non-empty, used **only** for `\\boxed{}` extraction and answer grading. Token budgeting always uses `response` in full. Use this when the policy emits hybrid internal reasoning before the final answer (e.g. Qwen3 family) so a spurious `\\boxed{}` inside the reasoning span does not affect grading.
 
 **Reset (OpenEnv / WebSocket)**: Besides `seed` and `episode_id`, clients may pass:
-- **`tokenizer_name`** (string, Hugging Face model id) — aligns both the episode budget cap **and** per-step token counting to the policy tokenizer (see Total episode budget below).
-- **`total_budget`** (int, optional) — explicit override for the episode budget cap; skips all automatic computation.
+- **`tokenizer_name`** (string, Hugging Face model id): aligns both the episode budget cap **and** per-step token counting to the policy tokenizer (see Total episode budget below).
+- **`total_budget`** (int, optional): explicit override for the episode budget cap; skips all automatic computation.
 
 **Total episode budget**: The `total_budget` for an episode is resolved with the following priority on each `reset`:
 
 | Priority | Condition | Formula | `budget_source` in obs metadata |
 |----------|-----------|---------|--------------------------------|
-| 1 — Client override | `total_budget` passed on reset | exact integer from client | `"client"` |
-| 2 — Tokenizer-native *(default for training)* | `tokenizer_name` passed on reset | `budget_ratio × Σ tokenize(question_i.text)` over the **10 sampled questions** | `"tokenizer_native"` |
-| 2b — Tokenizer load failure | `tokenizer_name` passed but server cannot load it | falls back to config formula (warns) | `"config"` |
-| 3 — Config fallback | neither `tokenizer_name` nor `total_budget` passed (warns) | `budget_ratio × num_questions × (min_tokens + max_tokens) / 2` | `"config"` |
+| 1. Client override | `total_budget` passed on reset | exact integer from client | `"client"` |
+| 2. Tokenizer-native *(default for training)* | `tokenizer_name` passed on reset | `budget_ratio × Σ tokenize(question_i.text)` over the **10 sampled questions** | `"tokenizer_native"` |
+| 2b. Tokenizer load failure | `tokenizer_name` passed but server cannot load it | falls back to config formula (warns) | `"config"` |
+| 3. Config fallback | neither `tokenizer_name` nor `total_budget` passed (warns) | `budget_ratio × num_questions × (min_tokens + max_tokens) / 2` | `"config"` |
 
 Under **tokenizer-native** (the normal training path), after sampling the 10 questions for the episode the server tokenizes each question’s text with `AutoTokenizer.from_pretrained(tokenizer_name)` and sets `total_budget = int(budget_ratio × total_question_tokens)`. Both the cap **and** per-step spend are then measured in the same policy-tokenizer units.
 
@@ -120,6 +120,23 @@ Configure in `env/config.py`:
 - `hard_cap_mode = True` (default): clip per-step spend to remaining budget and stop early when budget is effectively exhausted.
 - `hard_cap_mode = False`: no clipping by remaining budget, allow overspend, and learn via explicit overspend penalties.
 
+For Lambda / server runs, the env reads `REASON_BUDGET_*` overrides at startup
+via `EnvConfig.from_env()`. We used these variables for the A100 runs instead
+of changing constants in `env/config.py`:
+
+```bash
+export REASON_BUDGET_NUM_QUESTIONS=4      # or 10 for true full episodes
+export REASON_BUDGET_HARD_CAP_MODE=0
+export REASON_BUDGET_SOFT_ALLOW_NEGATIVE_BUDGET=1
+export REASON_BUDGET_SOFT_OVERSPEND_PENALTY=0.25
+export REASON_BUDGET_BUDGET_RATIO=4.0
+export REASON_BUDGET_TOKENIZER_NAME=Qwen/Qwen3-14B
+```
+
+Other supported overrides include dataset subset windows, total budget, token
+defaults, reward coefficients, target utilization, and seed. See
+`env/config.py` for the complete list.
+
 ## Docker
 
 Build context is the **repo root** (`ReasoningEconomicsEnv/`).
@@ -132,7 +149,7 @@ docker run -d --name ree-env -p 8000:8000 reasoning-economic-env # detached cont
 
 **Build logs:** The Dockerfile prints `BASE_IMAGE` and a JSON dump of default `EnvConfig` (including `tokenizer_name`, budget fields) in the **builder** and **final** stages. **Container logs:** On start, the entrypoint prints `REE_*` env vars and the **effective** `EnvConfig` after `REE_DEFAULT_TOKENIZER_NAME` / `REE_PROD` (optional).
 
-**Remote H100 (or any GPU host) — run env beside training:** The OpenEnv server is CPU-only (tokenizer + grading); no GPU flag is required for this container.
+**Remote H100 (or any GPU host), run env beside training:** The OpenEnv server is CPU-only (tokenizer + grading); no GPU flag is required for this container.
 
 ```bash
 # On the H100 machine (from this directory)

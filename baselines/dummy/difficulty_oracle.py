@@ -2,7 +2,7 @@
 
 from env.models import ReasonBudgetObservation
 
-# Heuristic target lengths (tokens) — env reward is still driven by global budget only.
+# Heuristic target lengths in tokens. Env reward is still driven by global budget only.
 PROBLEM_TYPE_TOKEN_MAP = {
     "MATH_AnsAug": 400,
     "GSM_Rephrased": 120,
