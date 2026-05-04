@@ -11,35 +11,12 @@ app_port: 8000
 
 A **post-training RL environment** for the OpenEnv Challenge (Meta PyTorch + HuggingFace + Unsloth). The LLM being trained is both the allocator and the solver. The environment serves math questions under a shared token budget, grades answers, counts tokens, and returns rewards.
 
-## Submitted branch
+Public project branches:
 
-ReasoningEconomicsEnv branch: `deepseed-harshawn`
-https://github.com/sharma-yash01/ReasoningEconomicsEnv/tree/deepseed-harshawn
+ReasoningEconomicsEnv: https://github.com/sharma-yash01/ReasoningEconomicsEnv/tree/khushi/grpo-experiments
+ReasoningEconomicsPT: https://github.com/sharma-yash01/ReasoningEconomicsPT/tree/khushi/grpo-experiments
 
-This branch adds runtime budget configuration for the OpenEnv server. The main
-change is that the server can now read `REASON_BUDGET_*` environment variables
-at startup, so we can switch between 4-question smoke runs, 10-question runs,
-hard budget mode, and soft budget mode without editing `env/config.py`.
-
-Main run setup:
-
-```bash
-cd ReasoningEconomicsEnv
-pip install -e .
-
-export REASON_BUDGET_NUM_QUESTIONS=4
-export REASON_BUDGET_HARD_CAP_MODE=0
-export REASON_BUDGET_SOFT_ALLOW_NEGATIVE_BUDGET=1
-export REASON_BUDGET_SOFT_OVERSPEND_PENALTY=0.25
-export REASON_BUDGET_BUDGET_RATIO=4.0
-export REASON_BUDGET_TOKENIZER_NAME=Qwen/Qwen3-14B
-
-uvicorn server.app:app --host 0.0.0.0 --port 8000
-```
-
-The environment server is CPU-only. It grades answers, tracks budget usage, and
-returns rewards to the PT trainer. The matching PT branch handles GPU training
-and needs multiple 80 GB GPUs, at least A100 class, for positive 14B results.
+Ran GRPO experiments on Qwen2.5-3B-Instruct across single- and multi-question episode configurations. Varied learning rates and tuned environment parameters, mean reward improved monotonically as context length and training duration increased. Soft-budget mode reduced early episode termination and increased reward variance compared to hard-cap, making it a useful curriculum stage before applying strict budget constraints.
 
 ## Design
 
