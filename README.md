@@ -11,6 +11,15 @@ app_port: 8000
 
 A **post-training RL environment** for the OpenEnv Challenge (Meta PyTorch + HuggingFace + Unsloth). The LLM being trained is both the allocator and the solver. The environment serves math questions under a shared token budget, grades answers, counts tokens, and returns rewards.
 
+Public project branches:
+
+- `ReasoningEconomicsEnv`: `https://github.com/sharma-yash01/ReasoningEconomicsEnv/tree/deepseed-harshawn`
+- `ReasoningEconomicsPT`: `https://github.com/sharma-yash01/ReasoningEconomicsPT/tree/deepseed-harshawn`
+
+The env server itself is CPU-only, but the PT training run that produced
+positive 14B progress needs multiple 80 GB GPUs, at least A100 class. The PT
+README has the full setup, run commands, hardware notes, and result log paths.
+
 ## Design
 
 The LLM receives math questions, generates reasoning traces and answers, and is rewarded or penalized by the environment based on correctness and token efficiency. There is no separate MLP policy, no frozen solver, and no cache.
