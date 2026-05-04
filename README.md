@@ -13,19 +13,33 @@ A **post-training RL environment** for the OpenEnv Challenge (Meta PyTorch + Hug
 
 ## Submitted branch
 
-Our submitted environment branch is `deepseed-harshawn`:
-`https://github.com/sharma-yash01/ReasoningEconomicsEnv/tree/deepseed-harshawn`
+ReasoningEconomicsEnv branch: `deepseed-harshawn`
+https://github.com/sharma-yash01/ReasoningEconomicsEnv/tree/deepseed-harshawn
 
-That branch adds `REASON_BUDGET_*` runtime overrides for the OpenEnv server.
-To run it for the PT branch, install the env and start the server:
+This branch adds runtime budget configuration for the OpenEnv server. The main
+change is that the server can now read `REASON_BUDGET_*` environment variables
+at startup, so we can switch between 4-question smoke runs, 10-question runs,
+hard budget mode, and soft budget mode without editing `env/config.py`.
+
+Main run setup:
 
 ```bash
+cd ReasoningEconomicsEnv
 pip install -e .
+
+export REASON_BUDGET_NUM_QUESTIONS=4
+export REASON_BUDGET_HARD_CAP_MODE=0
+export REASON_BUDGET_SOFT_ALLOW_NEGATIVE_BUDGET=1
+export REASON_BUDGET_SOFT_OVERSPEND_PENALTY=0.25
+export REASON_BUDGET_BUDGET_RATIO=4.0
+export REASON_BUDGET_TOKENIZER_NAME=Qwen/Qwen3-14B
+
 uvicorn server.app:app --host 0.0.0.0 --port 8000
 ```
 
-The env server is CPU-only. The matching PT branch handles the GPU training and
-needs multiple 80 GB GPUs, at least A100 class, for positive 14B results.
+The environment server is CPU-only. It grades answers, tracks budget usage, and
+returns rewards to the PT trainer. The matching PT branch handles GPU training
+and needs multiple 80 GB GPUs, at least A100 class, for positive 14B results.
 
 ## Design
 
