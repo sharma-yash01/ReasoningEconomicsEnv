@@ -11,6 +11,22 @@ app_port: 8000
 
 A **post-training RL environment** for the OpenEnv Challenge (Meta PyTorch + HuggingFace + Unsloth). The LLM being trained is both the allocator and the solver. The environment serves math questions under a shared token budget, grades answers, counts tokens, and returns rewards.
 
+## Submitted branch
+
+Our submitted environment branch is `deepseed-harshawn`:
+`https://github.com/sharma-yash01/ReasoningEconomicsEnv/tree/deepseed-harshawn`
+
+That branch adds `REASON_BUDGET_*` runtime overrides for the OpenEnv server.
+To run it for the PT branch, install the env and start the server:
+
+```bash
+pip install -e .
+uvicorn server.app:app --host 0.0.0.0 --port 8000
+```
+
+The env server is CPU-only. The matching PT branch handles the GPU training and
+needs multiple 80 GB GPUs, at least A100 class, for positive 14B results.
+
 ## Design
 
 The LLM receives math questions, generates reasoning traces and answers, and is rewarded or penalized by the environment based on correctness and token efficiency. There is no separate MLP policy, no frozen solver, and no cache.
