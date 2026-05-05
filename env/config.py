@@ -17,7 +17,7 @@ class EnvConfig:
     subset_size: int = 300
     # Same indexing for NuminaMath-TIR baby runs
     numina_subset_start_idx: int = 0
-    numina_subset_size: int = 500
+    numina_subset_size: int = 400
 
     # Budget policy: hard-cap preserves existing clipping/early-stop behavior.
     hard_cap_mode: bool = True
@@ -30,11 +30,11 @@ class EnvConfig:
     budget_ratio: float = 3.0
     min_tokens: int = 10
     max_tokens: int = 800
-    max_tokens_per_step: int = 2048
+    max_tokens_per_step: int = 2560
     tokenizer_name: str = "Qwen/Qwen2.5-0.5B-Instruct"
     beta: float = 0.05
-    gamma: float = 0.1
-    lambda_ep: float = 0.5
+    gamma: float = 0.15
+    lambda_ep: float = 0.4
     target_utilization: float = 0.85
     seed: Optional[int] = None
 
